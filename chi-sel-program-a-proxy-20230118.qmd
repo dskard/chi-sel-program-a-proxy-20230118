@@ -1,0 +1,632 @@
+---
+title: "Program A Proxy"
+execute:
+  eval: false
+format:
+  html:
+    toc: true
+    code-line-numbers: true
+editor: 
+  markdown: 
+    wrap: 72
+---
+
+## Why am I interested in proxies?
+
+## What proxies have i looked at or know about?
+
+### BrowserMob Proxy
+
+URL: https://github.com/lightbody/browsermob-proxy
+
+-   integrated nicely into my Selenium based browser automation scripts.
+-   produces a HAR file, this was my main purpose in using the proxy,
+    for debugging.
+-   configuration files lets you block requests.
+-   programming interface lets you start and stop recording for HAR
+    file.
+
+### Charles Proxy
+
+URL: https://www.charlesproxy.com/
+
+-   nice user interface
+-   powerful features like
+
+### Mokku -\> Mockoon
+
+URLs: https://github.com/mukuljainx/Mokku, https://mockoon.com/
+
+-   Teammate demo'd Mokku for mocking api calls
+
+-   Chrome browser extension
+
+-   No longer under development, website says to use Mockoon
+
+-   Never used Mockoon, but looks like it has a CLI, GUI, and a way to
+    send non-defined routes to a specified host, with "proxy" mode.
+
+### mitmproxy
+
+URL: https://mitmproxy.org/
+
+-   Proxy I have spent the most time with
+-   Three tools
+    -   mitmproxy - interactive command line, curses interface
+    -   mitmdump - non-interactive command line tool
+    -   mitmweb - web browser based graphical user interface
+-   You can write scripts and have the proxy execute the scripts for
+    each request/response.
+
+## Building this repo
+
+### Setting up R and Quarto
+
+1.  Use R 4.2.1
+
+    ```{bash}
+    renv local 4.2.1
+    ```
+
+2.  Launch `rstudio`, create a new project
+
+3.  Initialize the renv
+
+    ```{r}
+    renv::init()
+    ```
+
+4.  File -\> New File -\> Quarto Document
+
+5.  Install `rmarkdown, reticulate` packages
+
+### Setting up Python
+
+1.  Setup with Python 3.10.0 virtual environment
+
+    ```{bash}
+    py-init-venv 3.10.0 chi-sel-program-a-proxy-20230118
+    ```
+
+## Mitmproxy demos
+
+Install mitmproxy locally in python:
+
+```{bash}
+pip install mitmproxy
+```
+
+Includes 3 tools: 1. mitmdump - headless mode, start proxy, run scripts,
+dump log messages to stdout 2. mitmproxy - terminal base user interface,
+start proxy, run scripts, interactive filtering, see log messages 3.
+mitmweb - browser based user interface, start proxy, run scripts,
+interactive filtering, see log messages
+
+Docs include nice examples at
+https://docs.mitmproxy.org/stable/mitmproxytutorial-userinterface/
+
+### wttr.in - curl the weather
+
+We'll be playing with the api end points at http://wttr.in to curl the
+weather at different locations. We an send these requests through the
+proxy.
+
+### mitmdump - headless operations
+
+mitmdump isn't very exciting to play with. It is meant for headless
+mode. It can run scripts you write and print messages to the screen. In
+this example, we don't ask it to run any special scripts, just dump a
+summary of the network traffic it sees.
+
+mitmdump can: 1. start proxy 2. run scripts 3. dump log messages to
+stdout
+
+Start `mitmdump` in one terminal
+
+```{bash}
+mitmdump
+```
+
+Proxy is running on port `8080` on my computer.
+
+Make an HTTP request in another terminal using `curl`. Use the `--proxy`
+flag to tell `curl` to direct the request through our proxy listening on
+port 8080:
+
+```{bash}
+curl --proxy http://127.0.0.1:8080 "http://wttr.in/Chicago?0"
+```
+
+### mitmproxy - terminal operations
+
+mitmproxy provides a terminal based user interface.
+
+mitmproxy can: 1. start proxy 2. run scripts 3. interactive filtering 4.
+see log messages
+
+Start `mitmproxy` in one terminal
+
+```{bash}
+mitmproxy
+```
+
+Proxy is still running on port `8080`, but this time we get a
+curses-like interface in the terminal.
+
+Make an HTTP request in another terminal using `curl`. Use the `--proxy`
+flag to tell `curl` to direct the request through our proxy listening on
+port 8080:
+
+```{bash}
+curl --proxy http://127.0.0.1:8080 "http://wttr.in/Chicago?0"
+```
+
+Interactive: 1. Use arrow keys to navigate the list of flows 2. Use the
+enter key to select a flow 3. Use arrow keys to see the request,
+response, details of a flow 4. `q` to quit the view 5. `f` to filter,
+https://docs.mitmproxy.org/stable/concepts-filters/, `~u Chicago` 6. `i`
+to intercept a request. Use filter `~q & ~u Chicago` - flow is
+intercepted (red color) - press `enter` key to select intercepted flow -
+press `e` key to edit intercepted flow - change `Chicago` to `Dallas` -
+press `esc` to save change - press `q` to quit view - press `a` resume
+intercepted flow
+
+#### Writing a script to switch the weather report
+
+Catch requests for Chicago weather:
+
+    http://wttr.in/Chicago?0
+
+and convert them into requests for Dallas weather
+
+    http://wttr.in/Dallas?0
+
+Url syntax: ![](images/URI_syntax_diagram.svg){fig-align="center"} By
+<a href="//commons.wikimedia.org/wiki/User:Alhadis"
+title="User:Alhadis">Alhadis</a> - <span class="int-own-work"
+lang="en">Own work</span>,
+<a href="https://creativecommons.org/licenses/by-sa/4.0" title="Creative Commons Attribution-Share Alike 4.0">CC
+BY-SA 4.0</a>,
+<a href="https://commons.wikimedia.org/w/index.php?curid=82827943">Link</a>
+
+```{python}
+...
+    def request(self, flow: http.HTTPFlow) -> None:
+        # look in the request's url path for "Chicago"
+        if re.search(r"Chicago", flow.request.path) is not None:
+            # replace "Chicago" with "Dallas"
+            flow.request.path = re.sub(r"Chicago", "Dallas", flow.request.path)
+            logging.info("Changing city from Chicago to Dallas")
+...
+```
+
+Run a script:
+
+```{bash}
+mitmproxy -s demos/001_tour_of_tools/switch_wttr_cities.py
+```
+
+Use `E` key to see logs Try making request for Chicago weather. The
+request should be modified to get Dallas weather.
+
+    curl --proxy http://127.0.0.1:8080 "http://wttr.in/Chicago?0"
+
+### mitmweb - browser operations
+
+mitmweb provides a browser based user interface.
+
+mitmweb can: 1. start proxy 2. run scripts 3. interactive filtering 4.
+see log messages
+
+Start `mitmweb` in one terminal
+
+```{bash}
+mitmweb
+```
+
+It tries to open a web browser for you automatically.
+
+Make an HTTP request in another terminal using `curl`. Use the `--proxy`
+flag to tell `curl` to direct the request through our proxy listening on
+port 8080:
+
+```{bash}
+curl --proxy http://127.0.0.1:8080 "http://wttr.in/Chicago?0"
+```
+
+Interactive: 1. Use mouse to navigate the list of flows 2. For
+filtering, goto `Start` tab. Use filters in the `Search` box:
+`~u Chicago` 3. For intercepting a flow, goto `Start` tab. Use filters
+in the `Intercept` box: `~q & ~u Chicago` - Click on the flow to select
+it - Click on `Edit` button on right side to edit request - Click on
+`Done` button to finish editing flow - In flow list, use Green Arrow to
+resume flow
+
+## Using mitmproxy with a web browser - certificates and HTTPS
+
+Launch web browser, set to use proxy server 1. firefox -\> settings -\>
+general -\> network settings -\> manual proxy configuration 2. set http
+proxy to `localhost:8080` 3. also use this proxy for https
+
+Starting mitmdump creates a certificate in your `~/.mitmproxy` directory
+To do things "correctly" you need to have your web browser accept the
+certificate. See http://mitm.it/ for instructions on how to do that.
+It's a hassle, it might be kind of dangerous.
+
+To get around this, I use web browser controlled by Selenium.
+
+![](images/test_env_with_proxy.svg){fig-align="center"}
+
+Launch Selenium Grid in Docker containers:
+
+```{bash}
+cd ../
+make test-env-up
+```
+
+View the vnc sessions with shownode:
+
+```{bash}
+pip install shownode
+shownode 
+```
+
+In a separate terminal start the proxy through mitmweb:
+
+```{bash}
+make proxy-up PROXY_COMMAND="mitmweb --no-web-open-browser --web-host 0.0.0.0"
+```
+
+In your web browser, navigate to the mitmweb web user interface:
+
+```{bash}
+firefox -private http://127.0.0.1:8081/#/flows
+```
+
+Take a look at how we launch the web browser:
+
+```{python}
+...
+options = webdriver.firefox.options.Options()
+options.set_preference('network.proxy.type', 1)
+options.set_preference('network.proxy.http', opts.proxy_addr)
+options.set_preference('network.proxy.http_port', opts.proxy_port)
+options.set_preference('network.proxy.ssl', opts.proxy_addr)
+options.set_preference('network.proxy.ssl_port', opts.proxy_port)
+
+capabilities = webdriver.DesiredCapabilities.FIREFOX.copy()
+capabilities['acceptInsecureCerts'] = True
+
+# launch a web browser
+driver = webdriver.Remote(
+    command_executor=f"http://{opts.selenium_addr}:{opts.selenium_port}/wd/hub",
+    desired_capabilities=capabilities,
+    options=options,
+)
+...
+```
+
+In another terminal, start an automated web browser. tell the automated
+browser to talk to the proxy and accept certificates.
+
+```{bash}
+make run COMMAND="./demos/002_mitmproxy_with_browser/launch_proxied_browser.py"
+```
+
+Ahhh, too many messages. Firefox wants to detect portals and tracking!
+Let's filter those out:
+
+    !~d mozilla.net !~d mozilla.com !~d mozilla.org !~d firefox.com
+
+or you can block those in the configuration file.
+
+    block_list:
+        - :~d google.com:444
+        - :~d mozilla.net:444
+        - :~d mozilla.com:444
+        - :~d mozilla.org:444
+        - :~d firefox.com:444
+
+create the file `.mitmproxy/config.yaml` with the following:
+
+    block_list:
+        # block the "behind the scenes" requests from firefox
+        - :~d cdn\.mozilla\.net:444
+        - :~d services\.mozilla\.com:444
+        - :~d aus[0-9]+\.mozilla\.org:444
+        - :~d detectportal\.firefox\.com:444
+        # block the "behind the scenes" requests from chrome
+        - :~d gvt1\.com:444
+        - :~d update\.googleapis\.com:444
+        - :~d optimizationguide-pa\.googleapis\.com:444
+        - :~d gstatic\.com:444
+
+    # let the mouse be a regular terminal mouse
+    console_mouse: False
+
+    # don't show all of the behind the scenes requests from firefox
+    view_filter: '! ( ~d cdn\.mozilla\.net | ~d services\.mozilla\.com | ~d aus[0-9]+\.mozilla\.org | ~d detectportal\.firefox\.com | ~d gvt1\.com | ~d update\.googleapis\.com | ~d optimizationguide-pa\.googleapis\.com | ~d gstatic\.com)'
+
+    # don't try to open a web browser because mitmweb
+    # is probably running in a docker container
+    web_open_browser: False
+
+    # tell mitmweb web server to bind to all interfaces
+    # so we can access the web server from outside of the docker container
+    web_host: 0.0.0.0
+
+Restart the proxy so that it picks up the new configuration file:
+
+```{bash}
+make proxy-up PROXY_COMMAND="mitmweb --no-web-open-browser --web-host 0.0.0.0"
+
+# or we could probably use
+# make proxy-up PROXY_COMMAND="mitmweb"
+```
+
+Navigate the web browser back to the proxy at:
+`http://127.0.0.1:8081/#/flows`
+
+In the web browser, visit an https site. Browser doesn't complain
+because we told it to accept insecure certificates in
+`launch_proxied_browser.py`
+
+## Intercepting and rewriting HTTP requests and responses
+
+For the next part, we'll use an application server named [Shiny
+Server](https://posit.co/download/shiny-server/)
+
+![](images/test_env_with_proxy.svg){fig-align="center"}
+
+Launch docker container running shiny server
+
+```{bash}
+make shiny-server-up
+```
+
+In web browser, visit the shiny server at:
+`http://chisel_shiny-server:3838`
+
+With mitmproxy's addon system, we can write our own custom addons to
+intercepts and modify flows.
+
+Here's is an addon to that views every response from the shiny server
+and changes all strings that say `Shiny Server` to say
+`dskard's Server`:
+
+```{python}
+class RewriteShinyServerName:
+    ...
+    def response(self, flow: http.HTTPFlow) -> None:
+        if flow.request.path == "/" and flow.response and flow.response.content:
+            flow.response.content = flow.response.content.replace(
+                b"Shiny Server",
+                b"dskard's Server"
+            )
+
+...
+```
+
+Restart proxy and load the custom addon:
+
+```{bash}
+make proxy-up PROXY_COMMAND="mitmweb -s /tmp/demos/003_rewrite_http_response/rewrite_shiny_server_name.py"
+```
+
+In web browser, visit the shiny server at:
+`http://chisel_shiny-server:3838`
+
+All names like `Shiny Server` have been changed to `dskard's Server`
+
+## Intercepting and rewriting websocket messages
+
+We can also intercept and modify websocket messages.
+
+Two applications are launched on the web page. They both use websockets
+for communication between web browser and shiny server.
+
+Take a look in the proxy to identify websocket connections. You can
+filter websocket connections with filter: `~websocket`
+
+Visit a specific application:
+`http://chisel_shiny-server:3838/sample-apps/hello/`
+
+Take a look at the custom addon:
+
+```{python}
+class RewriteWebsocketMessage:
+    ...
+    def websocket_message(self, flow: http.HTTPFlow):
+        assert flow.websocket is not None
+
+        # get the latest message
+        message = flow.websocket.messages[-1]
+
+        if message.from_client is True:
+            # manipulate the message content
+            # when the message says to use 20 bins, replace it with 5 bins
+            pattern = rb'{\\"method\\":\\"update\\",\\"data\\":{\\"bins\\":20}}'
+            replacement = rb'{\\"method\\":\\"update\\",\\"data\\":{\\"bins\\":5}}'
+
+            if re.search(pattern, message.content) is not None:
+                message.content = re.sub(pattern, replacement, message.content)
+                logging.info(f"updated message: {message.content!r}")
+...
+```
+
+Restart proxy, load our custom addon:
+
+```{bash}
+make proxy-up PROXY_COMMAND="mitmweb -s /tmp/demos/004_rewrite_websocket_message/rewrite_websocket_message.py"
+```
+
+Try adjusting the the number of bins to 20. There should only be 5 bins
+showing. What happens if we adjust our addon to send -10 bins instead of
+5?
+
+## Turning an interactive proxy into a programmable proxy
+
+Using two Python libraries: 1. manageritm - "manager in the middle" -
+provides an interface to launch new proxy servers on the fly. -
+https://github.com/dskard/manageritm 2. mitmweb-client - provides an api
+for telling the mitmproxy used by mitmweb to perform actions. -
+https://github.com/dskard/mitmweb-client
+
+### Launch a mitmproxy server and web browser
+
+launch selenium grid and manageritm-server
+
+```{bash}
+make test-env-up
+```
+
+New script to launch proxy and browser. Let's take a look.
+
+```{python}
+...
+manageritm_addr = "chisel_manageritm-server_1"
+manageritm_port = "8000"
+selenium_hub = "chisel_selenium-hub_1"
+selenium_port = "4444"
+
+# create a manageritm client
+mc = manageritm.client.ManagerITMClient(
+  f'http://{manageritm_addr}:{manageritm_port}'
+)
+proxy_details = mc.client()
+
+print(f"proxy port: {proxy_details['port']}")
+print(f"proxy webport: {proxy_details['webport']}")
+
+# start a proxy server
+mc.proxy_start()
+
+# configure the web browser to talk to the proxy server
+# more info on options at:
+# https://www.selenium.dev/documentation/webdriver/capabilities/shared/
+options = webdriver.firefox.options.Options()
+options.set_preference('network.proxy.type', 1)
+options.set_preference('network.proxy.http', manageritm_addr)
+options.set_preference('network.proxy.http_port', proxy_details["port"])
+...
+
+# launch the web browser
+driver = webdriver.Remote(
+    command_executor=f"http://{selenium_hub}:{selenium_port}/wd/hub",
+    options=options,
+)
+...
+```
+
+Every time we launch a web browser, we can also launch a new proxy.
+Multiple proxy servers can run at the same time, using different ports.
+If running test cases in parallel, each test case gets its own proxy.
+
+Launch a proxy inside manageritm-server and a web browser on the
+selenium grid
+
+```{bash}
+make run COMMAND="./demos/005_programmable_proxy_manageritm/launch_proxied_browser.py"
+```
+
+Script will print out the webport where we can interact with the proxy.
+
+    ...
+    proxy port: 5288
+    proxy webport: 5202
+
+Visit this port in your local web browser:
+
+```{bash}
+firefox http://localhost:5202
+```
+
+manageritm writes out log files and saves har files to a directory named
+`hars`.
+
+### Control the mitmproxy with mitmweb-client
+
+We used `manageritm` to launch the proxy servers. We can use
+`mitmweb-client` to control the proxy servers.
+
+Now, when we launch the browser and proxy server, also create a client
+to talk to the `mitmweb` process and send commands to the proxy.
+
+```{python}
+manageritm_addr = "chisel_manageritm-server_1"
+manageritm_port = "8000"
+selenium_hub = "chisel_selenium-hub_1"
+selenium_port = "4444"
+
+# create a manageritm client
+mc = manageritm.client.ManagerITMClient(
+  f'http://{manageritm_addr}:{manageritm_port}'
+)
+proxy_details = mc.client(port=5200, webport=5201)
+
+print(f"proxy port: {proxy_details['port']}")
+print(f"proxy webport: {proxy_details['webport']}")
+
+mitmweb_ip = socket.gethostbyname(manageritm_addr)
+mitmweb_proxy_url = f"http://{mitmweb_ip}:{proxy_details['port']}"
+mitmweb_web_url = f"http://{mitmweb_ip}:{proxy_details['webport']}"
+proxies = {
+    'http': mitmweb_proxy_url,
+    'https': mitmweb_proxy_url
+}
+
+# start a proxy server
+mc.proxy_start()
+atexit.register(atexit_stop_proxy_server, mc)
+
+...
+
+# setup a MitmWebClient
+# make sure the mitmweb client traffic also uses our proxy.
+mwc = MitmWebClient(mitmweb_web_url, proxies=proxies)
+
+# configure the web browser to talk to the proxy server
+# more info on options at:
+# https://www.selenium.dev/documentation/webdriver/capabilities/shared/
+options = webdriver.firefox.options.Options()
+options.set_preference('network.proxy.type', 1)
+options.set_preference('network.proxy.http', manageritm_addr)
+options.set_preference('network.proxy.http_port', proxy_details["port"])
+...
+
+# launch the web browser
+driver = webdriver.Remote(
+    command_executor=f"http://{selenium_hub}:{selenium_port}/wd/hub",
+    options=options,
+)
+
+...
+
+# send proxy commands and get flows
+mwc.execute_command(
+  "view.filter.set",
+  ["~m GET & ~u duckduckgo.com/$ & ~c 200 & ! ~a"]
+)
+flows = mwc.get_flows()
+pp.pprint(flows)
+assert len(flows) >= 1
+assert flows[0]['response']['status_code'] == 200
+...
+```
+
+```{bash}
+make run COMMAND="python3 ./demos/006_control_proxy_with_mitmweb_client/intercept_request.py"
+```
+
+It went too fast. Let's run it through the debugger to see what
+happened.
+
+```{bash}
+make run COMMAND="python -m pdb ./demos/006_control_proxy_with_mitmweb_client/intercept_request.py"
+```
+
+Similar script, with different commands to block and unblock a website
+
+```{bash}
+make run COMMAND="python3 ./demos/006_control_proxy_with_mitmweb_client/block_and_unblock_website.py"
+```

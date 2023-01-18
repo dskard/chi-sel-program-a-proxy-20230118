@@ -1,0 +1,103 @@
+# SE_OPTS can be found at https://www.selenium.dev/documentation/grid/configuration/cli_options/
+
+services:
+
+  tre:
+    build:
+      context: tre
+      dockerfile: Dockerfile
+    image: chisel/tre
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+    volumes:
+      - "..:/home/docker/"
+    working_dir: /home/docker
+    command: ["bash"]
+
+  proxy:
+    image: mitmproxy/mitmproxy:9.0.1
+    ports:
+      - "8080:8080"           # mitmproxy / mitmweb listen port
+      - "8081:8081"           # mitmweb ui port
+    volumes:
+      - "../.mitmproxy:/home/mitmproxy/.mitmproxy"
+      - "../demos:/tmp/demos"
+    command: ["mitmproxy"]
+
+  shiny-server:
+    build:
+      context: shiny-server
+      dockerfile: Dockerfile
+      args:
+        - SSOS_VERSION=1.5.20.1002
+    image: chisel/shiny-server:1.5.20.1002
+    ports:
+      - 22
+      - 3838
+      - 4151
+    volumes:
+      - "..:/home/docker/"
+    working_dir: /home/docker
+    command: ["/opt/shiny-server/bin/shiny-server.sh"]
+
+  manageritm-server:
+    build:
+      context: manageritm
+      dockerfile: Dockerfile
+      args:
+          - MANAGERITM_VERSION=0.1.0
+    image: manageritm:0.1.0
+    user: ${USER_UID_GID}
+    ports:
+      - "5000-5299:5000-5299"       # mitmproxy listen ports and mitmweb ui ports
+      - "8000"                      # manageritm server port
+    volumes:
+      - "../:/home/manageritm"
+    working_dir: /home/manageritm
+    # can only use 1 worker because manageritm doesnt share information between workers
+    command: ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "1", "--log-level", "debug", "manageritm.app:main()"]
+
+  selenium-hub:
+    image: selenium/hub:4.7.2-20221219
+    ports:
+      - "4442:4442"
+      - "4443:4443"
+      - "4444:4444"
+    environment:
+      - SE_NODE_MAX_SESSIONS=100
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+
+  chrome:
+    image: selenium/node-chrome:4.7.2-20221219
+    ports:
+      - "5900"
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=100
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_OPTS=--session-timeout 7200
+    volumes:
+      - "/dev/shm:/dev/shm"
+
+  firefox:
+    image: selenium/node-firefox:4.7.2-20221219
+    ports:
+      - "5900"
+    depends_on:
+      - selenium-hub
+    environment:
+      - SE_EVENT_BUS_HOST=selenium-hub
+      - SE_EVENT_BUS_PUBLISH_PORT=4442
+      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+      - SE_NODE_MAX_SESSIONS=100
+      - SE_NODE_OVERRIDE_MAX_SESSIONS=true
+      - SE_OPTS=--session-timeout 7200
+    volumes:
+      - "/dev/shm:/dev/shm"
+
